@@ -1,0 +1,15 @@
+[settings]
+deadzone_pixels = 8
+snapping_threshold_pixels = 10
+layouts_enabled = true
+gestures_enabled = true
+
+[blacklist]
+processes = []
+
+[ui]
+preview_fill_color = 12156969
+preview_border_color = 14391348
+preview_opacity = 60
+preview_border_radius = 12
+gap_pixels = 8

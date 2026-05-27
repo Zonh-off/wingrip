@@ -1,0 +1,19 @@
+# Rust build artifacts
+/target/
+
+# IDE and Editor configurations
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln
+*.swp
+*.swo
+
+# Windows OS system files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+/.agent
