@@ -301,6 +301,16 @@ pub fn run_logic_loop(
                             if now.duration_since(last_update_time).as_millis() >= 20 {
                                 last_update_time = now;
 
+                                if active_region == ActiveRegion::Center {
+                                    let mut is_snapped = false;
+                                    if let Ok(guard) = SNAPPED_WINDOWS.lock() {
+                                        is_snapped = guard.contains_key(&(hwnd.0 as isize));
+                                    }
+                                    if is_snapped {
+                                        continue;
+                                    }
+                                }
+
                                 let mut new_x = start_window_rect.left;
                                 let mut new_y = start_window_rect.top;
                                 let mut new_w = start_window_rect.right - start_window_rect.left;
