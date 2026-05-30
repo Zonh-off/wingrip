@@ -2,7 +2,7 @@ use crate::input::{IS_OPERATION_ACTIVE, InputEvent, MouseAction, MouseButton};
 use crate::ui::UiEvent;
 use crossbeam_channel::{Receiver, Sender};
 use std::sync::atomic::Ordering;
-use windows::Win32::Foundation::RECT;
+use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
 };
@@ -189,30 +189,83 @@ pub fn run_logic_loop(
                                                 let x_rel = x - work.left;
                                                 let y_rel = y - work.top;
 
-                                                if y_rel <= 15 {
-                                                    preview_rect = work;
-                                                } else {
-                                                    if x_rel < work_w / 3 {
-                                                        preview_rect.right = work.left + work_w / 3;
-                                                    } else if x_rel > 2 * work_w / 3 {
-                                                        preview_rect.left =
-                                                            work.left + 2 * work_w / 3;
-                                                    } else if x_rel < work_w / 2 {
-                                                        preview_rect.right = work.left + work_w / 2;
-                                                    } else {
-                                                        preview_rect.left = work.left + work_w / 2;
+                                                // Check if the cursor is over any already zoned window
+                                                let mut target_zoned_window = None;
+                                                let mut target_zoned_rect = RECT::default();
+                                                if let Ok(guard) = SNAPPED_WINDOWS.lock() {
+                                                    for (&other_hwnd_val, &other_rect) in guard.iter() {
+                                                        if other_hwnd_val == hwnd.0 as isize {
+                                                            continue;
+                                                        }
+                                                        if x >= other_rect.left && x <= other_rect.right
+                                                            && y >= other_rect.top && y <= other_rect.bottom {
+                                                            target_zoned_window = Some(HWND(other_hwnd_val as *mut _));
+                                                            target_zoned_rect = other_rect;
+                                                            break;
+                                                        }
                                                     }
+                                                }
 
-                                                    if y_rel < work_h / 3 {
-                                                        preview_rect.bottom = work.top + work_h / 2;
-                                                    } else if y_rel > 2 * work_h / 3 {
-                                                        preview_rect.top = work.top + work_h / 2;
+                                                let split_enabled = crate::config::ATOMIC_SPLIT_ZONES_ENABLED.load(Ordering::Relaxed);
+                                                let mut preview_rect_adjusted = preview_rect;
+
+                                                if split_enabled && target_zoned_window.is_some() {
+                                                    let _target_hwnd = target_zoned_window.unwrap();
+                                                    let other_w = target_zoned_rect.right - target_zoned_rect.left;
+                                                    let other_h = target_zoned_rect.bottom - target_zoned_rect.top;
+
+                                                    if other_w > other_h {
+                                                        // Suggest vertical split
+                                                        let half_w = other_w / 2;
+                                                        if x < target_zoned_rect.left + half_w {
+                                                            preview_rect_adjusted.left = target_zoned_rect.left;
+                                                            preview_rect_adjusted.right = target_zoned_rect.left + half_w;
+                                                        } else {
+                                                            preview_rect_adjusted.left = target_zoned_rect.left + half_w;
+                                                            preview_rect_adjusted.right = target_zoned_rect.right;
+                                                        }
+                                                        preview_rect_adjusted.top = target_zoned_rect.top;
+                                                        preview_rect_adjusted.bottom = target_zoned_rect.bottom;
+                                                    } else {
+                                                        // Suggest horizontal split
+                                                        let half_h = other_h / 2;
+                                                        if y < target_zoned_rect.top + half_h {
+                                                            preview_rect_adjusted.top = target_zoned_rect.top;
+                                                            preview_rect_adjusted.bottom = target_zoned_rect.top + half_h;
+                                                        } else {
+                                                            preview_rect_adjusted.top = target_zoned_rect.top + half_h;
+                                                            preview_rect_adjusted.bottom = target_zoned_rect.bottom;
+                                                        }
+                                                        preview_rect_adjusted.left = target_zoned_rect.left;
+                                                        preview_rect_adjusted.right = target_zoned_rect.right;
                                                     }
+                                                } else {
+                                                    // Standard monitor quadrants/thirds/halves logic
+                                                    if y_rel <= 15 {
+                                                        preview_rect = work;
+                                                    } else {
+                                                        if x_rel < work_w / 3 {
+                                                            preview_rect.right = work.left + work_w / 3;
+                                                        } else if x_rel > 2 * work_w / 3 {
+                                                            preview_rect.left =
+                                                                work.left + 2 * work_w / 3;
+                                                        } else if x_rel < work_w / 2 {
+                                                            preview_rect.right = work.left + work_w / 2;
+                                                        } else {
+                                                            preview_rect.left = work.left + work_w / 2;
+                                                        }
+
+                                                        if y_rel < work_h / 3 {
+                                                            preview_rect.bottom = work.top + work_h / 2;
+                                                        } else if y_rel > 2 * work_h / 3 {
+                                                            preview_rect.top = work.top + work_h / 2;
+                                                        }
+                                                    }
+                                                    preview_rect_adjusted = adjust_rect_for_adjacent_snapped_windows(preview_rect, hwnd, work);
                                                 }
 
                                                 let gap_pixels = crate::config::ATOMIC_GAP_PIXELS
                                                     .load(Ordering::Relaxed);
-                                                let preview_rect_adjusted = adjust_rect_for_adjacent_snapped_windows(preview_rect, hwnd, work);
                                                 let balanced_preview = calculate_balanced_rect(
                                                     preview_rect_adjusted,
                                                     work,
@@ -555,53 +608,155 @@ pub fn run_logic_loop(
                                             let work_w = work.right - work.left;
                                             let work_h = work.bottom - work.top;
 
-                                            let mut snap_rect = work;
-                                            let x_rel = x - work.left;
+                                            // 1. Check if the cursor is over any already zoned window
+                                            let mut target_zoned_window = None;
+                                            let mut target_zoned_rect = RECT::default();
+                                            if let Ok(guard) = SNAPPED_WINDOWS.lock() {
+                                                for (&other_hwnd_val, &other_rect) in guard.iter() {
+                                                    if other_hwnd_val == hwnd.0 as isize {
+                                                        continue;
+                                                    }
+                                                    if x >= other_rect.left && x <= other_rect.right
+                                                        && y >= other_rect.top && y <= other_rect.bottom {
+                                                        target_zoned_window = Some(HWND(other_hwnd_val as *mut _));
+                                                        target_zoned_rect = other_rect;
+                                                        break;
+                                                    }
+                                                }
+                                            }
 
-                                            if x_rel < work_w / 3 {
-                                                snap_rect.right = work.left + work_w / 3;
-                                            } else if x_rel > 2 * work_w / 3 {
-                                                snap_rect.left = work.left + 2 * work_w / 3;
-                                            } else if x_rel < work_w / 2 {
-                                                snap_rect.right = work.left + work_w / 2;
+                                            let split_enabled = crate::config::ATOMIC_SPLIT_ZONES_ENABLED.load(Ordering::Relaxed);
+                                            if split_enabled && target_zoned_window.is_some() {
+                                                let target_hwnd = target_zoned_window.unwrap();
+                                                let other_w = target_zoned_rect.right - target_zoned_rect.left;
+                                                let other_h = target_zoned_rect.bottom - target_zoned_rect.top;
+
+                                                let mut snap_rect_adjusted = target_zoned_rect;
+                                                let mut other_new_rect = target_zoned_rect;
+
+                                                if other_w > other_h {
+                                                    // Vertical split
+                                                    let half_w = other_w / 2;
+                                                    if x < target_zoned_rect.left + half_w {
+                                                        snap_rect_adjusted.right = target_zoned_rect.left + half_w;
+                                                        other_new_rect.left = target_zoned_rect.left + half_w;
+                                                    } else {
+                                                        snap_rect_adjusted.left = target_zoned_rect.left + half_w;
+                                                        other_new_rect.right = target_zoned_rect.left + half_w;
+                                                    }
+                                                } else {
+                                                    // Horizontal split
+                                                    let half_h = other_h / 2;
+                                                    if y < target_zoned_rect.top + half_h {
+                                                        snap_rect_adjusted.bottom = target_zoned_rect.top + half_h;
+                                                        other_new_rect.top = target_zoned_rect.top + half_h;
+                                                    } else {
+                                                        snap_rect_adjusted.top = target_zoned_rect.top + half_h;
+                                                        other_new_rect.bottom = target_zoned_rect.top + half_h;
+                                                    }
+                                                }
+
+                                                if let Ok(mut guard) = PRE_SNAP_RECTS.lock() {
+                                                    guard.insert(hwnd.0 as isize, start_window_rect);
+                                                }
+
+                                                // Update and reposition our dragged window
+                                                let margins = safety::get_window_shadow_margins(hwnd);
+                                                let snap_x = snap_rect_adjusted.left - margins.left;
+                                                let snap_y = snap_rect_adjusted.top - margins.top;
+                                                let snap_w = (snap_rect_adjusted.right - snap_rect_adjusted.left)
+                                                    + margins.left
+                                                    + margins.right;
+                                                let snap_h = (snap_rect_adjusted.bottom - snap_rect_adjusted.top)
+                                                    + margins.top
+                                                    + margins.bottom;
+
+                                                let _ = SetWindowPos(
+                                                    hwnd,
+                                                    None,
+                                                    snap_x,
+                                                    snap_y,
+                                                    snap_w,
+                                                    snap_h,
+                                                    SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER,
+                                                );
+
+                                                // Update and reposition the split zoned window
+                                                let other_margins = safety::get_window_shadow_margins(target_hwnd);
+                                                let other_x = other_new_rect.left - other_margins.left;
+                                                let other_y = other_new_rect.top - other_margins.top;
+                                                let other_w_phys = (other_new_rect.right - other_new_rect.left)
+                                                    + other_margins.left
+                                                    + other_margins.right;
+                                                let other_h_phys = (other_new_rect.bottom - other_new_rect.top)
+                                                    + other_margins.top
+                                                    + other_margins.bottom;
+
+                                                let _ = SetWindowPos(
+                                                    target_hwnd,
+                                                    None,
+                                                    other_x,
+                                                    other_y,
+                                                    other_w_phys,
+                                                    other_h_phys,
+                                                    SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER,
+                                                );
+
+                                                // Save both windows in the snapping cache!
+                                                if let Ok(mut guard) = SNAPPED_WINDOWS.lock() {
+                                                    guard.insert(hwnd.0 as isize, snap_rect_adjusted);
+                                                    guard.insert(target_hwnd.0 as isize, other_new_rect);
+                                                }
                                             } else {
-                                                snap_rect.left = work.left + work_w / 2;
-                                            }
+                                                // Standard monitor quadrants/thirds/halves logic
+                                                let mut snap_rect = work;
+                                                let x_rel = x - work.left;
 
-                                            if y_rel < work_h / 3 {
-                                                snap_rect.bottom = work.top + work_h / 2;
-                                            } else if y_rel > 2 * work_h / 3 {
-                                                snap_rect.top = work.top + work_h / 2;
-                                            }
+                                                if x_rel < work_w / 3 {
+                                                    snap_rect.right = work.left + work_w / 3;
+                                                } else if x_rel > 2 * work_w / 3 {
+                                                    snap_rect.left = work.left + 2 * work_w / 3;
+                                                } else if x_rel < work_w / 2 {
+                                                    snap_rect.right = work.left + work_w / 2;
+                                                } else {
+                                                    snap_rect.left = work.left + work_w / 2;
+                                                }
 
-                                            let snap_rect_adjusted = adjust_rect_for_adjacent_snapped_windows(snap_rect, hwnd, work);
+                                                if y_rel < work_h / 3 {
+                                                    snap_rect.bottom = work.top + work_h / 2;
+                                                } else if y_rel > 2 * work_h / 3 {
+                                                    snap_rect.top = work.top + work_h / 2;
+                                                }
 
-                                            if let Ok(mut guard) = PRE_SNAP_RECTS.lock() {
-                                                guard.insert(hwnd.0 as isize, start_window_rect);
-                                            }
+                                                let snap_rect_adjusted = adjust_rect_for_adjacent_snapped_windows(snap_rect, hwnd, work);
 
-                                            let margins = safety::get_window_shadow_margins(hwnd);
-                                            let snap_x = snap_rect_adjusted.left - margins.left;
-                                            let snap_y = snap_rect_adjusted.top - margins.top;
-                                            let snap_w = (snap_rect_adjusted.right - snap_rect_adjusted.left)
-                                                + margins.left
-                                                + margins.right;
-                                            let snap_h = (snap_rect_adjusted.bottom - snap_rect_adjusted.top)
-                                                + margins.top
-                                                + margins.bottom;
+                                                if let Ok(mut guard) = PRE_SNAP_RECTS.lock() {
+                                                    guard.insert(hwnd.0 as isize, start_window_rect);
+                                                }
 
-                                            let _ = SetWindowPos(
-                                                hwnd,
-                                                None,
-                                                snap_x,
-                                                snap_y,
-                                                snap_w,
-                                                snap_h,
-                                                SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER,
-                                            );
+                                                let margins = safety::get_window_shadow_margins(hwnd);
+                                                let snap_x = snap_rect_adjusted.left - margins.left;
+                                                let snap_y = snap_rect_adjusted.top - margins.top;
+                                                let snap_w = (snap_rect_adjusted.right - snap_rect_adjusted.left)
+                                                    + margins.left
+                                                    + margins.right;
+                                                let snap_h = (snap_rect_adjusted.bottom - snap_rect_adjusted.top)
+                                                    + margins.top
+                                                    + margins.bottom;
 
-                                            if let Ok(mut guard) = SNAPPED_WINDOWS.lock() {
-                                                guard.insert(hwnd.0 as isize, snap_rect_adjusted);
+                                                let _ = SetWindowPos(
+                                                    hwnd,
+                                                    None,
+                                                    snap_x,
+                                                    snap_y,
+                                                    snap_w,
+                                                    snap_h,
+                                                    SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER,
+                                                );
+
+                                                if let Ok(mut guard) = SNAPPED_WINDOWS.lock() {
+                                                    guard.insert(hwnd.0 as isize, snap_rect_adjusted);
+                                                }
                                             }
                                         }
                                     }

@@ -524,6 +524,13 @@ pub fn draw_dashboard_fluent(hdc: HDC, w: i32, h: i32) {
                     state.layouts_enabled,
                     360,
                 );
+                draw_toggle_card(
+                    hdc,
+                    "Dynamic Splitting",
+                    "Suggest and split layout zones when dragging over active windows.",
+                    state.split_zones_enabled,
+                    440,
+                );
             }
             _ => {
                 // Blacklist configs
@@ -559,9 +566,9 @@ pub fn draw_dashboard_fluent(hdc: HDC, w: i32, h: i32) {
         // ----------------------------------------------------
         let save_rect = RECT {
             left: 240,
-            top: 460,
+            top: 530,
             right: 680,
-            bottom: 496,
+            bottom: 566,
         };
         let save_pen = CreatePen(
             PS_SOLID,

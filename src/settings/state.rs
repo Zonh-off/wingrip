@@ -23,6 +23,7 @@ pub static STATE: Lazy<Mutex<DashboardState>> = Lazy::new(|| {
         startup_enabled: crate::config::registry::is_startup_enabled(),
         layouts_enabled: cfg.settings.layouts_enabled.unwrap_or(true),
         gestures_enabled: cfg.settings.gestures_enabled.unwrap_or(true),
+        split_zones_enabled: cfg.settings.split_zones_enabled.unwrap_or(true),
     })
 });
 

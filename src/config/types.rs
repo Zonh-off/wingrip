@@ -6,6 +6,7 @@ pub struct Settings {
     pub snapping_threshold_pixels: i32,
     pub layouts_enabled: Option<bool>,
     pub gestures_enabled: Option<bool>,
+    pub split_zones_enabled: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -37,6 +38,7 @@ impl Default for Config {
                 snapping_threshold_pixels: 10,
                 layouts_enabled: Some(true),
                 gestures_enabled: Some(true),
+                split_zones_enabled: Some(true),
             },
             blacklist: Blacklist {
                 processes: vec![

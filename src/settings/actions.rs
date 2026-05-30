@@ -71,6 +71,7 @@ pub fn commit_settings_action(hwnd: HWND) -> Result<(), Box<dyn std::error::Erro
             snapping_threshold_pixels: state.threshold,
             layouts_enabled: Some(state.layouts_enabled),
             gestures_enabled: Some(state.gestures_enabled),
+            split_zones_enabled: Some(state.split_zones_enabled),
         },
         blacklist: Blacklist { processes },
         ui: Some(UiConfig {

@@ -73,7 +73,7 @@ fn run_settings_gui() -> Result<(), Box<dyn std::error::Error>> {
             200,
             200,
             740,
-            560,
+            640,
             HWND::default(),
             HMENU::default(),
             instance,
@@ -308,7 +308,7 @@ unsafe extern "system" fn settings_wnd_proc(
                 return LRESULT(0);
             }
 
-            WM_MOUSEMOVE => {
+             WM_MOUSEMOVE => {
                 let x = (lparam.0 & 0xFFFF) as i16 as i32;
                 let y = ((lparam.0 >> 16) & 0xFFFF) as i16 as i32;
 
@@ -325,9 +325,13 @@ unsafe extern "system" fn settings_wnd_proc(
                         new_hover = HoveredControl::SidebarTab(2);
                     }
                 } else {
-                    // Save Button (Y = 460, Width = 440, Height = 36)
-                    if x >= 240 && x < 680 && y >= 460 && y < 496 {
+                    // Save Button (Y = 530, Width = 440, Height = 36)
+                    if x >= 240 && x < 680 && y >= 530 && y < 566 {
                         new_hover = HoveredControl::SaveButton;
+                    }
+                    // Tab 1 Dynamic Splitting Toggle Hover (Y = 440 to 504)
+                    else if state.active_tab == 1 && x >= 240 && x < 680 && y >= 440 && y < 504 {
+                        new_hover = HoveredControl::SplitZonesToggle;
                     }
                 }
 
@@ -380,12 +384,16 @@ unsafe extern "system" fn settings_wnd_proc(
                             if y >= 360 && y < 424 {
                                 state.layouts_enabled = !state.layouts_enabled;
                             }
+                            // Dynamic Splitting (Toggle Switch)
+                            else if y >= 440 && y < 504 {
+                                state.split_zones_enabled = !state.split_zones_enabled;
+                            }
                         }
                         _ => {}
                     }
 
                     // 3. Save Button clicked
-                    if x >= 240 && x < 680 && y >= 460 && y < 496 {
+                    if x >= 240 && x < 680 && y >= 530 && y < 566 {
                         drop(state);
                         if let Err(e) = commit_settings_action(hwnd) {
                             eprintln!("[ERROR] Failed to save settings: {:?}", e);

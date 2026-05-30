@@ -3,6 +3,7 @@ deadzone_pixels = 8
 snapping_threshold_pixels = 10
 layouts_enabled = true
 gestures_enabled = true
+split_zones_enabled = true
 
 [blacklist]
 processes = []

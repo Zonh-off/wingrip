@@ -29,6 +29,7 @@ pub enum HoveredControl {
     OpacityInc,
     LayoutsDec,
     LayoutsInc,
+    SplitZonesToggle,
     // Action Buttons
     SaveButton,
 }
@@ -49,4 +50,5 @@ pub struct DashboardState {
     pub startup_enabled: bool,
     pub layouts_enabled: bool,
     pub gestures_enabled: bool,
+    pub split_zones_enabled: bool,
 }

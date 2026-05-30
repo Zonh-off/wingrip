@@ -11,6 +11,7 @@ pub static ATOMIC_PREVIEW_OPACITY: AtomicU8 = AtomicU8::new(120);
 pub static ATOMIC_PREVIEW_BORDER_RADIUS: AtomicI32 = AtomicI32::new(8);
 pub static ATOMIC_LAYOUTS_ENABLED: AtomicBool = AtomicBool::new(true);
 pub static ATOMIC_GESTURES_ENABLED: AtomicBool = AtomicBool::new(true);
+pub static ATOMIC_SPLIT_ZONES_ENABLED: AtomicBool = AtomicBool::new(true);
 
 pub fn sync_atomics(config: &Config) {
     ATOMIC_DEADZONE_PIXELS.store(config.settings.deadzone_pixels, Ordering::Relaxed);
@@ -18,6 +19,7 @@ pub fn sync_atomics(config: &Config) {
         .store(config.settings.snapping_threshold_pixels, Ordering::Relaxed);
     ATOMIC_LAYOUTS_ENABLED.store(config.settings.layouts_enabled.unwrap_or(true), Ordering::Relaxed);
     ATOMIC_GESTURES_ENABLED.store(config.settings.gestures_enabled.unwrap_or(true), Ordering::Relaxed);
+    ATOMIC_SPLIT_ZONES_ENABLED.store(config.settings.split_zones_enabled.unwrap_or(true), Ordering::Relaxed);
 
     let ui = config.get_ui_config();
     ATOMIC_GAP_PIXELS.store(ui.gap_pixels, Ordering::Relaxed);
